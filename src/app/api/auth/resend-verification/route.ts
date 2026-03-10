@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { generateOTP, storeOTP } from "@/server/services/otpService";
 import { sendVerificationEmail } from "@/server/services/emailService";
-import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
 const resendAttempts = new Map<string, { count: number; resetAt: number }>();
 
 const MAX_RESENDS_PER_HOUR = 3;
@@ -42,7 +43,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -73,7 +76,8 @@ export async function POST(request: Request) {
       });
     }
 
-    const remainingResends = MAX_RESENDS_PER_HOUR - (userAttempts?.count || 1);
+    const remainingResends =
+      MAX_RESENDS_PER_HOUR - (resendAttempts.get(userId)?.count || 1);
 
     return NextResponse.json({
       success: true,

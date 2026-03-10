@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { gifts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { calculateProcessingFee } from "@/lib/fees";
 
 export async function GET(
@@ -9,21 +11,11 @@ export async function GET(
   try {
     const { giftId } = await params;
 
-    const gift = await prisma.gift.findUnique({
-      where: { id: giftId },
-      include: {
-        recipient: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        sender: {
-          select: {
-            name: true,
-          },
-        },
+    const gift = await db.query.gifts.findFirst({
+      where: eq(gifts.id, giftId),
+      with: {
+        recipient: { columns: { id: true, name: true, email: true } },
+        sender: { columns: { name: true } },
       },
     });
 
@@ -49,9 +41,9 @@ export async function GET(
         success: true,
         data: {
           recipient: {
-            id: gift.recipient.id,
-            name: gift.recipient.name,
-            email: gift.recipient.email,
+            id: gift.recipient?.id,
+            name: gift.recipient?.name,
+            email: gift.recipient?.email,
           },
           amount: gift.amount,
           currency: gift.currency,

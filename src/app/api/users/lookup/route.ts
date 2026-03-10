@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { isRateLimited } from "@/lib/rate-limiter";
-import {
-  normalizePhoneNumber,
-  validatePhoneNumber,
-} from "@/lib/validation";
+import { normalizePhoneNumber, validatePhoneNumber } from "@/lib/validation";
 
 const LOOKUP_RATE_LIMIT = 20;
 const LOOKUP_RATE_WINDOW_MS = 60_000;
@@ -16,7 +15,9 @@ export async function GET(request: NextRequest) {
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       "127.0.0.1";
 
-    if (isRateLimited(`lookup:${ip}`, LOOKUP_RATE_LIMIT, LOOKUP_RATE_WINDOW_MS)) {
+    if (
+      isRateLimited(`lookup:${ip}`, LOOKUP_RATE_LIMIT, LOOKUP_RATE_WINDOW_MS)
+    ) {
       return NextResponse.json(
         { success: false, error: "Too many requests. Please try again later." },
         { status: 429 },
@@ -48,9 +49,9 @@ export async function GET(request: NextRequest) {
 
     const normalizedPhone = normalizePhoneNumber(phoneParam);
 
-    const user = await prisma.user.findUnique({
-      where: { phoneNumber: normalizedPhone },
-      select: {
+    const user = await db.query.users.findFirst({
+      where: eq(users.phoneNumber, normalizedPhone),
+      columns: {
         name: true,
         username: true,
         avatarUrl: true,

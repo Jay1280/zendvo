@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users, emailVerifications } from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { getAuthPayload } from "@/lib/auth-session";
 import { generateOTP, storeOTP } from "@/server/services/otpService";
 import { sendVerificationEmail } from "@/server/services/emailService";
@@ -16,8 +18,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, payload.userId),
     });
 
     if (!user) {
@@ -39,19 +41,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const latestVerification = await prisma.emailVerification.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
+    const latestVerification = await db.query.emailVerifications.findFirst({
+      where: eq(emailVerifications.userId, user.id),
+      orderBy: [desc(emailVerifications.createdAt)],
+      columns: { createdAt: true },
     });
 
     const now = Date.now();
     if (
       latestVerification &&
-      now - latestVerification.createdAt.getTime() < RESEND_COOLDOWN_MS
+      now - new Date(latestVerification.createdAt).getTime() <
+        RESEND_COOLDOWN_MS
     ) {
       const retryAfterSeconds = Math.ceil(
-        (RESEND_COOLDOWN_MS - (now - latestVerification.createdAt.getTime())) /
+        (RESEND_COOLDOWN_MS -
+          (now - new Date(latestVerification.createdAt).getTime())) /
           1000,
       );
 

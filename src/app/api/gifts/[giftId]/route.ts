@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { gifts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 const REVIEWABLE_GIFT_STATUSES = new Set(["pending_otp", "otp_verified"]);
 
@@ -19,11 +21,11 @@ export async function GET(
 
     const { giftId } = await params;
 
-    const gift = await prisma.gift.findUnique({
-      where: { id: giftId },
-      include: {
+    const gift = await db.query.gifts.findFirst({
+      where: eq(gifts.id, giftId),
+      with: {
         recipient: {
-          select: {
+          columns: {
             id: true,
             name: true,
             email: true,

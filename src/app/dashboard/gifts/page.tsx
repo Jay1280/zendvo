@@ -66,8 +66,9 @@ const formatUnlockLabel = (date: string, time: string): string => {
 export default function DashboardGiftsPage() {
   const [giftValues, setGiftValues] =
     useState<GiftDetailsFormValues>(INITIAL_GIFT_VALUES);
-  const [senderValues, setSenderValues] =
-    useState<SenderDetailsValues>(INITIAL_SENDER_VALUES);
+  const [senderValues, setSenderValues] = useState<SenderDetailsValues>(
+    INITIAL_SENDER_VALUES,
+  );
   const [step, setStep] = useState<FlowStep>("send-gift");
   const [isProceeding, setIsProceeding] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
@@ -128,6 +129,7 @@ export default function DashboardGiftsPage() {
 
       {isSuccessModalOpen ? (
         <GiftSuccessModal
+          isOpen={true}
           recipientName={giftValues.recipientName || "John Eze"}
           onClose={() => setIsSuccessModalOpen(false)}
         />

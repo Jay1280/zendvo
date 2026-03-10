@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/server/db/drizzle";
-import { wallets, gifts } from "@/server/db/schema";
+import { db } from "@/lib/db";
+import { wallets, gifts } from "@/lib/db/schema";
 import { eq, or, sql, and, ne } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
@@ -28,9 +28,7 @@ export async function GET(request: NextRequest) {
             totalSent: sql<number>`coalesce(sum(${gifts.amount}), 0)`,
           })
           .from(gifts)
-          .where(
-            and(eq(gifts.senderId, userId), ne(gifts.status, "failed")),
-          ),
+          .where(and(eq(gifts.senderId, userId), ne(gifts.status, "failed"))),
 
         db
           .select({

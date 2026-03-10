@@ -1,23 +1,26 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { passwordResets } from "@/lib/db/schema";
+import { or, lt, isNotNull } from "drizzle-orm";
 
 export async function cleanupExpiredTokens() {
   try {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const result = await prisma.passwordReset.deleteMany({
-      where: {
-        OR: [
-          { expiresAt: { lt: new Date() } },
-          { createdAt: { lt: twentyFourHoursAgo } },
-          { usedAt: { not: null } },
-        ],
-      },
-    });
+    const result = await db
+      .delete(passwordResets)
+      .where(
+        or(
+          lt(passwordResets.expiresAt, new Date()),
+          lt(passwordResets.createdAt, twentyFourHoursAgo),
+          isNotNull(passwordResets.usedAt),
+        ),
+      )
+      .returning();
 
     console.log(
-      `[CLEANUP_JOB] Deleted ${result.count} expired/used password reset tokens.`,
+      `[CLEANUP_JOB] Deleted ${result.length} expired/used password reset tokens.`,
     );
-    return result.count;
+    return result.length;
   } catch (error) {
     console.error("[CLEANUP_JOB_ERROR]", error);
     throw error;

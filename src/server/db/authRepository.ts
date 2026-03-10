@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { db } from "./drizzle";
-import { passwordResets, refreshTokens, users } from "./schema";
+import { db } from "@/lib/db";
+import { passwordResets, refreshTokens, users } from "@/lib/db/schema";
 
 export interface RegisterUserInput {
   email: string;
@@ -27,73 +27,54 @@ export interface PasswordResetRequest {
   };
 }
 
-function toDate(value: string): Date {
-  return new Date(value);
-}
-
-function toDateString(date: Date): string {
-  return date.toISOString();
-}
-
 export async function findUserByEmail(email: string): Promise<AuthUser | null> {
-  const [user] = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      role: users.role,
-      status: users.status,
-    })
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
 
-  return user ?? null;
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status,
+  };
 }
 
 export async function createUser(input: RegisterUserInput): Promise<AuthUser> {
-  const now = toDateString(new Date());
-  const userId = crypto.randomUUID();
-
-  await db.insert(users).values({
-    id: userId,
-    email: input.email,
-    passwordHash: input.passwordHash,
-    name: input.name ?? null,
-    role: "user",
-    status: "unverified",
-    loginAttempts: 0,
-    lockUntil: null,
-    createdAt: now,
-    updatedAt: now,
-    lastLogin: null,
-  });
+  const [user] = await db
+    .insert(users)
+    .values({
+      email: input.email,
+      passwordHash: input.passwordHash,
+      name: input.name ?? null,
+      role: "user",
+      status: "unverified",
+      loginAttempts: 0,
+      lockUntil: null,
+    })
+    .returning();
 
   return {
-    id: userId,
-    email: input.email,
-    name: input.name ?? null,
-    role: "user",
-    status: "unverified",
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status,
   };
 }
 
 export async function findPasswordResetByToken(
   token: string,
 ): Promise<PasswordResetRequest | null> {
-  const [record] = await db
-    .select({
-      id: passwordResets.id,
-      userId: passwordResets.userId,
-      expiresAt: passwordResets.expiresAt,
-      usedAt: passwordResets.usedAt,
-      email: users.email,
-      name: users.name,
-    })
-    .from(passwordResets)
-    .innerJoin(users, eq(users.id, passwordResets.userId))
-    .where(eq(passwordResets.token, token))
-    .limit(1);
+  const record = await db.query.passwordResets.findFirst({
+    where: eq(passwordResets.token, token),
+    with: {
+      user: true,
+    },
+  });
 
   if (!record) {
     return null;
@@ -102,11 +83,11 @@ export async function findPasswordResetByToken(
   return {
     id: record.id,
     userId: record.userId,
-    expiresAt: toDate(record.expiresAt),
-    usedAt: record.usedAt ? toDate(record.usedAt) : null,
+    expiresAt: record.expiresAt,
+    usedAt: record.usedAt,
     user: {
-      email: record.email,
-      name: record.name ?? null,
+      email: record.user.email,
+      name: record.user.name,
     },
   };
 }
@@ -116,7 +97,7 @@ export async function completePasswordReset(input: {
   userId: string;
   passwordHash: string;
 }): Promise<void> {
-  const now = toDateString(new Date());
+  const now = new Date();
 
   await db
     .update(users)
@@ -130,7 +111,10 @@ export async function completePasswordReset(input: {
     .update(passwordResets)
     .set({ usedAt: now })
     .where(
-      and(eq(passwordResets.id, input.resetId), eq(passwordResets.userId, input.userId)),
+      and(
+        eq(passwordResets.id, input.resetId),
+        eq(passwordResets.userId, input.userId),
+      ),
     );
 
   await db.delete(refreshTokens).where(eq(refreshTokens.userId, input.userId));

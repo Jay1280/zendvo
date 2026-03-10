@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { generateOTP, storeOTP } from "@/server/services/otpService";
 import { sendVerificationEmail } from "@/server/services/emailService";
 import { validateEmail, sanitizeInput } from "@/lib/validation";
@@ -47,27 +49,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user exists (Optional based on requirements, but good practice)
-    // Requirement says "Send the plaintext OTP to the user's email address".
-    // If user doesn't exist, we probably shouldn't send anything or should send a generic "if account exists" email.
-    // However, for "auth/send-otp" it implies an auth flow.
-    // Let's check if user exists to get the userId for storage.
-    const user = await prisma.user.findUnique({
-      where: { email: sanitizedEmail },
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, sanitizedEmail),
     });
 
     if (!user) {
-      // Return 200 to prevent user enumeration, but don't send OTP
-      // Or 404 if this is strictly for existing users.
-      // Given "auth/send-otp", it might be for login or verification.
-      // If for registration, user might not exist yet?
-      // But existing `send-verification` requires `userId`.
-      // The requirement "Store the hashed OTP... in a secure cache/database" implies we need a way to link it to the request.
-      // If we use `emailVerification` table, it requires `userId`.
-      // So we must have a user.
       return NextResponse.json(
         { success: false, error: "User not found" },
-        { status: 404 }, // Or 200 with generic message
+        { status: 404 },
       );
     }
 

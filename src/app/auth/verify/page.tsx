@@ -7,6 +7,7 @@ import { WorldMapShowcase } from "@/components/auth/WordMapShowcase";
 import OTPInput from "@/components/auth/OTPInput";
 import Button from "@/components/Button";
 import Alert from "@/components/Alert";
+import { useAuthContext } from "@/context/AuthContext";
 import { HelpModal } from "@/components/auth/HelpModal";
 import { EmailVerificationSuccess } from "@/components/auth/EmailVerificationSuccess";
 
@@ -24,7 +25,9 @@ export default function VerifyPage() {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
-  
+
+  const { login } = useAuthContext();
+
   // Mock email - in real app, this would come from URL params or context
   const userEmail = "jo***3@gmail.com";
 
@@ -104,13 +107,13 @@ export default function VerifyPage() {
 
     console.log("Verifying code:", code);
     setIsSubmitting(false);
-    
+
     // Show success notification
     setNotification({
       type: "success",
       message: "OTP Verification successful",
     });
-    
+
     // Set verified state after showing notification
     setTimeout(() => {
       setIsVerified(true);
@@ -119,12 +122,12 @@ export default function VerifyPage() {
 
   const handleContinueToDashboard = async () => {
     setIsNavigating(true);
-    
-    // Simulate any final setup/API calls
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    // Navigate to create new password page
-    router.push("/auth/create-password");
+
+    // Establishing session via mocked AuthContext
+    await login("john123@gmail.com", "password123");
+
+    // Smooth transition to dashboard
+    router.push("/dashboard/sender");
   };
 
   const handleOtpChange = (value: string) => {

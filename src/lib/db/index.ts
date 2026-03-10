@@ -1,12 +1,14 @@
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
-
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import * as schema from "./schema";
 
-const databaseUrl = process.env.DATABASE_URL || "file:./prisma/dev.db";
+const databaseUrl =
+  process.env.DATABASE_URL ||
+  "postgres://postgres:postgres@localhost:5432/zendvo";
 
-const client = createClient({
-  url: databaseUrl,
+const pool = new Pool({
+  connectionString: databaseUrl,
 });
 
-export const db = drizzle(client, { schema });
+export const db = drizzle(pool, { schema });
+export default db;

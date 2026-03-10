@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users, passwordResets } from "@/lib/db/schema";
+import { eq, isNull } from "drizzle-orm";
 import { validateEmail, sanitizeInput } from "@/lib/validation";
 import { isRateLimited } from "@/lib/rate-limiter";
 import { sendForgotPasswordEmail } from "@/server/services/emailService";
@@ -38,33 +40,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: sanitizedEmail },
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, sanitizedEmail),
     });
 
     if (user) {
       const token = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-      await prisma.$transaction([
-        prisma.passwordReset.updateMany({
-          where: {
-            userId: user.id,
-            usedAt: null,
-          },
-          data: {
-            usedAt: new Date(),
-          },
-        }),
-        prisma.passwordReset.create({
-          data: {
-            userId: user.id,
-            token,
-            expiresAt,
-            ipAddress: ip,
-          },
-        }),
-      ]);
+      // Invalidate existing unused tokens and create new one
+      await db.transaction(async (tx) => {
+        await tx
+          .update(passwordResets)
+          .set({ usedAt: new Date() })
+          .where(eq(passwordResets.userId, user.id));
+
+        await tx.insert(passwordResets).values({
+          userId: user.id,
+          token,
+          expiresAt,
+          ipAddress: ip,
+        });
+      });
 
       sendForgotPasswordEmail(user.email, token, user.name || undefined).catch(
         (err) => console.error("[FORGOT_PASSWORD_EMAIL_ERROR]", err),
@@ -89,4 +86,9 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("[FORGOT_PASSWORD_ERROR]", error);
-   
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}

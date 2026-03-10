@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { getAuthPayload } from "@/lib/auth-session";
 
 export async function GET(request: NextRequest) {
@@ -12,9 +14,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: {
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, payload.userId),
+      columns: {
         id: true,
         email: true,
         name: true,

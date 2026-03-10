@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users, gifts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import {
   validateAmount,
   validateCurrency,
@@ -58,8 +60,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if recipient exists
-    const recipientUser = await prisma.user.findUnique({
-      where: { id: recipient },
+    const recipientUser = await db.query.users.findFirst({
+      where: eq(users.id, recipient),
     });
 
     if (!recipientUser) {
@@ -82,8 +84,9 @@ export async function POST(request: NextRequest) {
     const sanitizedTemplate = template ? sanitizeInput(template) : null;
 
     // Create gift record
-    const gift = await prisma.gift.create({
-      data: {
+    const [newGift] = await db
+      .insert(gifts)
+      .values({
         senderId: userId,
         recipientId: recipient,
         amount,
@@ -91,12 +94,12 @@ export async function POST(request: NextRequest) {
         message: sanitizedMessage,
         template: sanitizedTemplate,
         status: "pending_otp",
-      },
-    });
+      })
+      .returning();
 
     // Generate and store OTP
     const otp = generateOTP();
-    await storeGiftOTP(gift.id, otp);
+    await storeGiftOTP(newGift.id, otp);
 
     // Send OTP to sender
     const emailResult = await sendGiftConfirmationOTP(
@@ -106,8 +109,6 @@ export async function POST(request: NextRequest) {
     );
 
     if (!emailResult.success) {
-      // If email fails, we could delete the gift or mark it as failed
-      // For now, we'll proceed but log the error
       console.error(
         "Failed to send gift confirmation OTP:",
         emailResult.message,
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        giftId: gift.id,
+        giftId: newGift.id,
         status: "pending_otp",
       },
       { status: 201 },

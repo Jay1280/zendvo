@@ -1,9 +1,8 @@
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { prisma } from "@/lib/prisma";
-
-// Use the singleton prisma instance instead of creating a new one
+import { db } from "@/lib/db";
+import { users, emailVerifications, gifts } from "@/lib/db/schema";
+import { eq, and, desc, lt, or } from "drizzle-orm";
 
 export function generateOTP(): string {
   // CSPRNG compliant
@@ -12,66 +11,65 @@ export function generateOTP(): string {
 
 /**
  * Generates a SHA-256 hash of the OTP with a unique salt.
- * Returns the salt and hash combined or structured.
- * For this implementation, we'll return { salt, hash }.
  */
 export function hashOTP(otp: string): { salt: string; hash: string } {
   const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto
-    .createHmac("sha256", salt)
-    .update(otp)
-    .digest("hex");
+  const hash = crypto.createHmac("sha256", salt).update(otp).digest("hex");
   return { salt, hash };
 }
 
 /**
  * Verifies an OTP against a stored hash and salt using constant-time comparison.
  */
-export function verifyOTPHash(otp: string, storedHash: string, salt: string): boolean {
-  const hash = crypto
-    .createHmac("sha256", salt)
-    .update(otp)
-    .digest("hex");
-  
-  // Constant-time comparison to prevent timing attacks
-  return crypto.timingSafeEqual(
-    Buffer.from(hash),
-    Buffer.from(storedHash)
-  );
+export function verifyOTPHash(
+  otp: string,
+  storedHash: string,
+  salt: string,
+): boolean {
+  const hash = crypto.createHmac("sha256", salt).update(otp).digest("hex");
+
+  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(storedHash));
 }
 
 export async function storeOTP(userId: string, otp: string) {
-  // Use SHA-256 with unique salt as requested
   const { salt, hash } = hashOTP(otp);
-  // Store salt and hash combined in otpHash field: "salt:hash"
-  // This allows us to reuse the existing string column without schema migration
   const storedValue = `${salt}:${hash}`;
-  
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes TTL
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
   // Invalidate previous unused OTPs
-  await prisma.emailVerification.updateMany({
-    where: { userId, isUsed: false },
-    data: { isUsed: true },
-  });
+  await db
+    .update(emailVerifications)
+    .set({ isUsed: true })
+    .where(
+      and(
+        eq(emailVerifications.userId, userId),
+        eq(emailVerifications.isUsed, false),
+      ),
+    );
 
   console.log(`[AUDIT] OTP generated for user ${userId}`);
 
-  return await prisma.emailVerification.create({
-    data: {
+  const [newVerification] = await db
+    .insert(emailVerifications)
+    .values({
       userId,
       otpHash: storedValue,
       expiresAt,
       attempts: 0,
       isUsed: false,
-    },
-  });
+    })
+    .returning();
+
+  return newVerification;
 }
 
 export async function verifyOTP(userId: string, otp: string) {
-  const verification = await prisma.emailVerification.findFirst({
-    where: { userId, isUsed: false },
-    orderBy: { createdAt: "desc" },
+  const verification = await db.query.emailVerifications.findFirst({
+    where: and(
+      eq(emailVerifications.userId, userId),
+      eq(emailVerifications.isUsed, false),
+    ),
+    orderBy: [desc(emailVerifications.createdAt)],
   });
 
   if (!verification) {
@@ -88,12 +86,12 @@ export async function verifyOTP(userId: string, otp: string) {
     };
   }
 
-  // Check if account is locked (via user table or inferred from attempts)
-  // Requirement: "After 5 consecutive failed attempts, lock the account for 30 minutes"
-  // We need to check the user's lock status first.
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (user && (user as any).lockUntil && new Date() < (user as any).lockUntil) {
-     return {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+  });
+
+  if (user && user.lockUntil && new Date() < user.lockUntil) {
+    return {
       success: false,
       message: "Account is temporarily locked. Please try again later.",
       locked: true,
@@ -101,51 +99,40 @@ export async function verifyOTP(userId: string, otp: string) {
   }
 
   if (verification.attempts >= 5) {
-     // Ensure lock is applied if not already (redundant safety)
-     return {
+    return {
       success: false,
       message: "Maximum attempts exceeded. Account is locked.",
       locked: true,
     };
   }
 
-  // Determine hashing method (bcrypt or SHA-256) based on stored format
   let isValid = false;
   const storedHash = verification.otpHash;
 
   if (storedHash.includes(":")) {
-    // SHA-256 format "salt:hash"
     const [salt, hash] = storedHash.split(":");
     isValid = verifyOTPHash(otp, hash, salt);
   } else {
-    // Fallback to bcrypt for backward compatibility
     isValid = await bcrypt.compare(otp, storedHash);
   }
 
   if (!isValid) {
     const newAttempts = verification.attempts + 1;
-    
-    await prisma.emailVerification.update({
-      where: { id: verification.id },
-      data: { attempts: newAttempts },
-    });
+
+    await db
+      .update(emailVerifications)
+      .set({ attempts: newAttempts })
+      .where(eq(emailVerifications.id, verification.id));
 
     if (newAttempts >= 5) {
-      // Lock the account for 30 minutes
       const lockUntil = new Date(Date.now() + 30 * 60 * 1000);
-      await prisma.user.update({
-        where: { id: userId },
-        data: { 
-          lockUntil: lockUntil,
-          // We don't change status to suspended, just temporary lock
-        } as any, // casting as any because lockUntil might not be in inferred types if strict
-      });
-      
+      await db.update(users).set({ lockUntil }).where(eq(users.id, userId));
+
       return {
         success: false,
         message: "Maximum attempts exceeded. Account locked for 30 minutes.",
         locked: true,
-        shouldSendAlert: true, // Signal to caller to send alert email
+        shouldSendAlert: true,
       };
     }
 
@@ -158,57 +145,63 @@ export async function verifyOTP(userId: string, otp: string) {
   }
 
   // Success path
-  await prisma.emailVerification.delete({
-    where: { id: verification.id },
-  });
+  await db
+    .delete(emailVerifications)
+    .where(eq(emailVerifications.id, verification.id));
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { 
+  await db
+    .update(users)
+    .set({
       status: "active",
-      lockUntil: null, // Clear any locks
-      loginAttempts: 0 
-    } as any,
-  });
+      lockUntil: null,
+      loginAttempts: 0,
+    })
+    .where(eq(users.id, userId));
 
   return { success: true, message: "Email verified successfully!" };
 }
 
 export async function cleanupExpiredOTPs() {
-  const deleted = await prisma.emailVerification.deleteMany({
-    where: {
-      OR: [
-        { expiresAt: { lt: new Date() } },
-        { createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
-      ],
-    },
-  });
-  return deleted.count;
+  const result = await db
+    .delete(emailVerifications)
+    .where(
+      or(
+        lt(emailVerifications.expiresAt, new Date()),
+        lt(
+          emailVerifications.createdAt,
+          new Date(Date.now() - 24 * 60 * 60 * 1000),
+        ),
+      ),
+    )
+    .returning();
+  return result.length;
 }
 
 export async function storeGiftOTP(giftId: string, otp: string) {
-  // Using SHA-256 for gifts too for consistency? 
-  // Requirement was specifically for "Endpoint 1", but let's stick to bcrypt for gifts 
-  // unless requested otherwise, to minimize regression risk on gifts.
-  // Actually, let's keep bcrypt for gifts as it's separate flow not mentioned in requirements.
   const saltRounds = 10;
   const otpHash = await bcrypt.hash(otp, saltRounds);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-  return await prisma.gift.update({
-    where: { id: giftId },
-    data: {
+  return await db
+    .update(gifts)
+    .set({
       otpHash,
       otpExpiresAt: expiresAt,
       otpAttempts: 0,
-    },
-  });
+    })
+    .where(eq(gifts.id, giftId))
+    .returning();
 }
 
 const MAX_GIFT_OTP_ATTEMPTS = 5;
 
 export async function verifyGiftOTP(
-  gift: { id: string; otpHash: string | null; otpExpiresAt: Date | null; otpAttempts: number },
+  gift: {
+    id: string;
+    otpHash: string | null;
+    otpExpiresAt: Date | null;
+    otpAttempts: number;
+  },
   otp: string,
 ) {
   if (!gift.otpHash || !gift.otpExpiresAt) {
@@ -236,10 +229,10 @@ export async function verifyGiftOTP(
   const isValid = await bcrypt.compare(otp, gift.otpHash);
 
   if (!isValid) {
-    await prisma.gift.update({
-      where: { id: gift.id },
-      data: { otpAttempts: gift.otpAttempts + 1 },
-    });
+    await db
+      .update(gifts)
+      .set({ otpAttempts: gift.otpAttempts + 1 })
+      .where(eq(gifts.id, gift.id));
 
     const remainingAttempts = MAX_GIFT_OTP_ATTEMPTS - (gift.otpAttempts + 1);
     return {
@@ -250,16 +243,15 @@ export async function verifyGiftOTP(
     };
   }
 
-  // Mark as OTP verified (ready for confirmation)
-  await prisma.gift.update({
-    where: { id: gift.id },
-    data: {
+  await db
+    .update(gifts)
+    .set({
       status: "otp_verified",
       otpHash: null,
       otpExpiresAt: null,
       otpAttempts: 0,
-    },
-  });
+    })
+    .where(eq(gifts.id, gift.id));
 
   return { success: true, message: "Gift OTP verified successfully!" };
 }

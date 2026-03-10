@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { refreshTokens } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
@@ -18,9 +20,9 @@ export async function POST(request: NextRequest) {
 
     if (refreshToken) {
       try {
-        await prisma.refreshToken.delete({
-          where: { token: refreshToken },
-        });
+        await db
+          .delete(refreshTokens)
+          .where(eq(refreshTokens.token, refreshToken));
       } catch (e) {}
     }
 

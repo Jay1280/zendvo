@@ -12,9 +12,10 @@ import {
 } from "@/assets/svg";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useAuthContext } from "@/context/AuthContext";
 
 const mainMenuItems = [
   { name: "Dashboard", href: "/dashboard/sender", icon: DashboardIcon },
@@ -35,7 +36,18 @@ interface SideBarProps {
 
 export const SideBar = ({ isOpen, onClose }: SideBarProps) => {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuthContext();
   const [darkMode, setDarkMode] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.push("/auth/login");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
@@ -108,7 +120,7 @@ export const SideBar = ({ isOpen, onClose }: SideBarProps) => {
                 onClick={onClose}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
                   active
-                    ? "bg-[#ECEFFE] text-white"
+                    ? "bg-[#ECEFFE] text-[#5A42DE]"
                     : "text-gray-600 hover:bg-gray-50"
                 }`}
               >
@@ -147,7 +159,7 @@ export const SideBar = ({ isOpen, onClose }: SideBarProps) => {
                 onClick={onClose}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
                   active
-                    ? "bg-[#ECEFFE] text-white"
+                    ? "bg-[#ECEFFE] text-[#5A42DE]"
                     : "text-gray-600 hover:bg-gray-50"
                 }`}
               >
@@ -160,7 +172,10 @@ export const SideBar = ({ isOpen, onClose }: SideBarProps) => {
       </div>
 
       {/* Logout */}
-      <button className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-gray-700 transition-colors">
+      <button
+        onClick={handleLogout}
+        className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-gray-700 transition-colors w-full text-left"
+      >
         <LogOutDoor />
         <span className="text-sm font-medium">Logout</span>
       </button>

@@ -6,16 +6,62 @@ import { PhoneInput } from "@/components/PhoneInput";
 import Button from "@/components/Button";
 
 // Import your placeholder image
-import UserProfile from "@/assets/images/user.png"; 
+import UserProfile from "@/assets/images/user.png";
 
 const PRESET_AMOUNTS = [5, 10, 50, 100, 200, 500];
 const MAX_MESSAGE_LENGTH = 200;
 
-export default function SendGiftDetailsForm() {
+export type GiftContact = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+};
+
+export type GiftTemplate = {
+  id: string;
+  name: string;
+};
+
+export type GiftDetailsFormValues = {
+  recipientId: string;
+  recipientName: string;
+  recipientEmail: string;
+  recipientPhone: string;
+  amount: string;
+  currency: string;
+  message: string;
+  templateId: string;
+  hideAmountUntilUnlock: boolean;
+  anonymousUntilUnlock: boolean;
+  unlockDate: string;
+  unlockTime: string;
+};
+
+export type SendGiftDetailsFormProps = {
+  contacts?: GiftContact[];
+  templates?: GiftTemplate[];
+  value?: GiftDetailsFormValues;
+  onChange?: (val: GiftDetailsFormValues) => void;
+  onContinue?: () => void;
+};
+
+export default function SendGiftDetailsForm({
+  contacts,
+  templates,
+  value,
+  onChange,
+  onContinue,
+}: SendGiftDetailsFormProps) {
   // Recipient State
   const [countryCode, setCountryCode] = useState("+234");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [recipient, setRecipient] = useState<{ name: string; username: string; avatar: any } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [recipient, setRecipient] = useState<{
+    name: string;
+    username: string;
+    avatar: any;
+  } | null>(null);
 
   // Amount State
   const [amount, setAmount] = useState<string>("");
@@ -63,17 +109,14 @@ export default function SendGiftDetailsForm() {
 
   // 3. Validation for the Continue Button
   const isFormValid =
-    recipient !== null &&
-    amount !== "" &&
-    Number(amount) > 0 &&
-    !dateTimeError;
+    recipient !== null && amount !== "" && Number(amount) > 0 && !dateTimeError;
 
   const handleContinue = () => {
     setIsLoading(true);
     // Simulate API/Routing delay
     setTimeout(() => {
       setIsLoading(false);
-      alert("Validation passed! Ready to proceed to the Review screen.");
+      onContinue?.();
     }, 1000);
   };
 
@@ -98,7 +141,7 @@ export default function SendGiftDetailsForm() {
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
             />
-            
+
             {/* Contact Card (Renders when recipient is found) */}
             {recipient && (
               <div className="mt-3 flex items-center gap-3 p-3 bg-white border border-[#E5E7EB] rounded-xl shadow-sm transition-all animate-in fade-in slide-in-from-top-2">
@@ -123,11 +166,15 @@ export default function SendGiftDetailsForm() {
 
           {/* Amount Selection */}
           <div>
-            <label className="block text-xs text-[#9CA3AF] mb-2 px-1">Gift Amount (USD)</label>
-            
+            <label className="block text-xs text-[#9CA3AF] mb-2 px-1">
+              Gift Amount (USD)
+            </label>
+
             {/* Custom Amount Input */}
             <div className="relative flex items-center mb-3">
-              <span className="absolute left-4 text-[#18181B] font-medium text-lg">$</span>
+              <span className="absolute left-4 text-[#18181B] font-medium text-lg">
+                $
+              </span>
               <input
                 type="number"
                 min="1"
@@ -159,7 +206,9 @@ export default function SendGiftDetailsForm() {
 
           {/* Delivery Date & Time */}
           <div>
-            <label className="block text-xs text-[#9CA3AF] mb-2 px-1">Delivery Date & Time (Optional)</label>
+            <label className="block text-xs text-[#9CA3AF] mb-2 px-1">
+              Delivery Date & Time (Optional)
+            </label>
             <div className="grid grid-cols-2 gap-3">
               <input
                 type="date"
@@ -188,7 +237,10 @@ export default function SendGiftDetailsForm() {
               onChange={(e) => setHideAmount(e.target.checked)}
               className="size-4 rounded border-gray-300 text-[#5A42DE] focus:ring-[#5A42DE]"
             />
-            <label htmlFor="hideAmount" className="text-[13px] text-[#18181B] cursor-pointer select-none">
+            <label
+              htmlFor="hideAmount"
+              className="text-[13px] text-[#18181B] cursor-pointer select-none"
+            >
               Hide amount from Recipient
             </label>
           </div>
@@ -196,8 +248,12 @@ export default function SendGiftDetailsForm() {
           {/* Message Textarea */}
           <div>
             <div className="flex justify-between items-end mb-2 px-1">
-              <label className="block text-xs text-[#9CA3AF]">Message / Note (Optional)</label>
-              <span className={`text-[10px] ${message.length >= MAX_MESSAGE_LENGTH ? 'text-red-500' : 'text-[#717182]'}`}>
+              <label className="block text-xs text-[#9CA3AF]">
+                Message / Note (Optional)
+              </label>
+              <span
+                className={`text-[10px] ${message.length >= MAX_MESSAGE_LENGTH ? "text-red-500" : "text-[#717182]"}`}
+              >
                 {message.length}/{MAX_MESSAGE_LENGTH}
               </span>
             </div>

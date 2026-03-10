@@ -1,0 +1,24 @@
+# Labels for PRs based on changed files
+
+frontend:
+  - "src/app/**/*"
+  - "src/components/**/*"
+  - "public/**/*"
+
+backend:
+  - "src/api/**/*"
+  - "src/lib/**/*"
+  - "src/server/**/*"
+
+prisma:
+  - "prisma/**/*"
+
+documentation:
+  - "*.md"
+  - "swagger.yaml"
+
+config:
+  - "*.json"
+  - "*.config.*"
+  - ".gitignore"
+  - ".github/**/*"

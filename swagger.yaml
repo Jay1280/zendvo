@@ -275,6 +275,54 @@ paths:
         "500":
           description: Internal server error
 
+  /api/gifts:
+    get:
+      summary: Get user gifts
+      description: Returns a list of gifts for the authenticated user.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of gifts
+        "401":
+          description: Unauthorized
+    post:
+      summary: Create a new gift
+      description: Initiates a gift sending process.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - recipient
+                - amount
+                - currency
+              properties:
+                recipient:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+                currency:
+                  type: string
+                message:
+                  type: string
+                template:
+                  type: string
+      responses:
+        "201":
+          description: Gift created, pending OTP
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "422":
+          description: Validation error
+
 components:
   securitySchemes:
     bearerAuth:

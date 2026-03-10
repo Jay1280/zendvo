@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { gifts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { generateShareLinkToken } from "@/lib/tokens";
 import { processGiftTransaction } from "@/server/services/transactionService";
 import { notifyGiftConfirmed } from "@/server/services/notificationService";
@@ -15,20 +17,14 @@ export async function POST(
   try {
     const { giftId } = await params;
 
-    // Fetch the gift with relationships
-    const gift = await prisma.gift.findUnique({
-      where: { id: giftId },
-      include: {
-        sender: {
-          select: { id: true, name: true, email: true },
-        },
-        recipient: {
-          select: { id: true, name: true, email: true },
-        },
+    const gift = await db.query.gifts.findFirst({
+      where: eq(gifts.id, giftId),
+      with: {
+        sender: { columns: { id: true, name: true, email: true } },
+        recipient: { columns: { id: true, name: true, email: true } },
       },
     });
 
-    // Gift not found
     if (!gift) {
       return NextResponse.json(
         { success: false, error: "Gift not found" },
@@ -36,9 +32,7 @@ export async function POST(
       );
     }
 
-    // Check if gift status is pending_review
     if (gift.status !== "pending_review") {
-      // If already completed, return 409 Conflict
       if (gift.status === "completed") {
         return NextResponse.json(
           {
@@ -49,8 +43,6 @@ export async function POST(
           { status: 409 },
         );
       }
-
-      // Otherwise, return 400 Bad Request
       return NextResponse.json(
         {
           success: false,
@@ -61,49 +53,36 @@ export async function POST(
       );
     }
 
-    // Generate unique share link token
     const shareLinkToken = generateShareLinkToken();
     const shareLink = `/gift/${shareLinkToken}`;
 
-    // Process transaction and update gift atomically
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const transactionId = await prisma.$transaction(async (tx: any) => {
-      // Process the gift transaction (wallet updates)
-      const txnId = await processGiftTransaction({
-        senderId: gift.senderId,
-        recipientId: gift.recipientId,
-        amount: gift.amount,
-        currency: gift.currency,
-      });
-
-      // Update gift status to completed
-      await tx.gift.update({
-        where: { id: giftId },
-        data: {
-          status: "completed",
-          transactionId: txnId,
-          shareLink,
-          shareLinkToken,
-          completedAt: new Date(),
-        },
-      });
-
-      return txnId;
+    const transactionId = await processGiftTransaction({
+      senderId: gift.senderId,
+      recipientId: gift.recipientId,
+      amount: gift.amount,
+      currency: gift.currency,
     });
 
-    // Create in-app notifications (non-blocking)
+    await db
+      .update(gifts)
+      .set({
+        status: "completed",
+        transactionId,
+        updatedAt: new Date(),
+      })
+      .where(eq(gifts.id, giftId));
+
     notifyGiftConfirmed(
       gift.senderId,
       gift.recipientId,
       gift.amount,
       gift.currency,
       shareLink,
-      gift.unlockDatetime,
+      gift.unlockDatetime ?? undefined,
     ).catch((err: unknown) => {
       console.error("[GIFT_CONFIRM_NOTIFICATION_ERROR]", err);
     });
 
-    // Send confirmation email to sender (non-blocking)
     if (gift.senderId && gift.sender) {
       sendGiftCompletionToSender(
         gift.sender.email,
@@ -112,11 +91,10 @@ export async function POST(
         gift.amount,
         gift.currency,
         gift.recipient?.name || "Gift Recipient",
-      ).catch((err: unknown) => {
-        console.error("[GIFT_CONFIRM_SENDER_EMAIL_ERROR]", err);
-      });
+      ).catch((err: unknown) =>
+        console.error("[GIFT_CONFIRM_SENDER_EMAIL_ERROR]", err),
+      );
     } else if (gift.senderEmail && gift.senderName) {
-      // For public gifts (no authenticated sender)
       sendGiftCompletionToSender(
         gift.senderEmail,
         gift.senderName,
@@ -124,12 +102,11 @@ export async function POST(
         gift.amount,
         gift.currency,
         gift.recipient?.name || "Gift Recipient",
-      ).catch((err: unknown) => {
-        console.error("[GIFT_CONFIRM_PUBLIC_SENDER_EMAIL_ERROR]", err);
-      });
+      ).catch((err: unknown) =>
+        console.error("[GIFT_CONFIRM_PUBLIC_SENDER_EMAIL_ERROR]", err),
+      );
     }
 
-    // Send notification email to recipient (non-blocking)
     if (gift.recipient) {
       sendGiftNotificationToRecipient(
         gift.recipient.email,
@@ -137,10 +114,10 @@ export async function POST(
         gift.senderName || (gift.sender?.name ?? "Someone"),
         gift.amount,
         gift.currency,
-        gift.unlockDatetime,
-      ).catch((err: unknown) => {
-        console.error("[GIFT_CONFIRM_RECIPIENT_EMAIL_ERROR]", err);
-      });
+        gift.unlockDatetime ?? undefined,
+      ).catch((err: unknown) =>
+        console.error("[GIFT_CONFIRM_RECIPIENT_EMAIL_ERROR]", err),
+      );
     }
 
     return NextResponse.json(
@@ -155,24 +132,17 @@ export async function POST(
     );
   } catch (error) {
     console.error("[GIFT_CONFIRM_ERROR]", error);
-
-    if (error instanceof Error) {
-      if (error.message.includes("Insufficient balance")) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Insufficient balance to send gift",
-          },
-          { status: 422 },
-        );
-      }
+    if (
+      error instanceof Error &&
+      error.message.includes("Insufficient balance")
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Insufficient balance to send gift" },
+        { status: 422 },
+      );
     }
-
     return NextResponse.json(
-      {
-        success: false,
-        error: "Internal server error",
-      },
+      { success: false, error: "Internal server error" },
       { status: 500 },
     );
   }

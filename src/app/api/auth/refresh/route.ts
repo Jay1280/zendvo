@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { refreshTokens } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import {
   verifyRefreshToken,
   generateAccessToken,
@@ -38,9 +40,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const storedToken = (await prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
-    })) as any;
+    const storedToken = await db.query.refreshTokens.findFirst({
+      where: eq(refreshTokens.token, refreshToken),
+    });
 
     if (!storedToken) {
       return NextResponse.json(
@@ -71,19 +73,17 @@ export async function POST(request: NextRequest) {
     const newAccessToken = await generateAccessToken(newPayload);
     const newRefreshToken = await generateRefreshToken(newPayload);
 
-    await prisma.$transaction([
-      prisma.refreshToken.delete({
-        where: { id: storedToken.id },
-      }),
-      prisma.refreshToken.create({
-        data: {
-          userId: payload.userId,
-          token: newRefreshToken,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          deviceInfo: storedToken.deviceInfo,
-        } as any,
-      }),
-    ]);
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(refreshTokens)
+        .where(eq(refreshTokens.id, storedToken.id));
+      await tx.insert(refreshTokens).values({
+        userId: payload.userId,
+        token: newRefreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        deviceInfo: storedToken.deviceInfo,
+      });
+    });
 
     const response = NextResponse.json(
       {

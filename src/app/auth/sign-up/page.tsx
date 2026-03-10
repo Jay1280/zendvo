@@ -1,13 +1,13 @@
-'use client'
-import React, { useState, FormEvent } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { AuthLayout } from '@/layouts/AuthLayout';
-import { WorldMapShowcase } from '@/components/auth/WordMapShowcase';
-import { Input } from '@/components/Input';
-import { PhoneInput } from '@/components/PhoneInput';
-import { PasswordInput } from '@/components/PasswordInput';
-import Button from '@/components/Button';
+"use client";
+import React, { useState, FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { AuthLayout } from "@/layouts/AuthLayout";
+import { WorldMapShowcase } from "@/components/auth/WordMapShowcase";
+import { Input } from "@/components/Input";
+import { PhoneInput } from "@/components/PhoneInput";
+import { PasswordInput } from "@/components/PasswordInput";
+import Button from "@/components/Button";
 
 interface FormData {
   fullName: string;
@@ -26,15 +26,15 @@ interface FormErrors {
   confirmPassword?: string;
 }
 
- const SignUp: React.FC = () => {
+const SignUp: React.FC = () => {
   const route = useRouter();
   const [formData, setFormData] = useState<FormData>({
-    fullName: '',
-    phoneNumber: '',
-    countryCode: '+234',
-    email: '',
-    password: '',
-    confirmPassword: '',
+    fullName: "",
+    phoneNumber: "",
+    countryCode: "+234",
+    email: "",
+    password: "",
+    confirmPassword: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -46,16 +46,16 @@ interface FormErrors {
 
   const validatePassword = (password: string): string | undefined => {
     if (password.length < 8) {
-      return 'Password must be at least 8 characters long';
+      return "Password must be at least 8 characters long";
     }
     if (!/[A-Z]/.test(password)) {
-      return 'Password must contain at least one uppercase letter';
+      return "Password must contain at least one uppercase letter";
     }
     if (!/[a-z]/.test(password)) {
-      return 'Password must contain at least one lowercase letter';
+      return "Password must contain at least one lowercase letter";
     }
     if (!/[0-9]/.test(password)) {
-      return 'Password must contain at least one number';
+      return "Password must contain at least one number";
     }
     return undefined;
   };
@@ -65,28 +65,28 @@ interface FormErrors {
 
     // Full Name validation
     if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
+      newErrors.fullName = "Full name is required";
     } else if (formData.fullName.trim().length < 2) {
-      newErrors.fullName = 'Full name must be at least 2 characters';
+      newErrors.fullName = "Full name must be at least 2 characters";
     }
 
     // Phone Number validation
     if (!formData.phoneNumber.trim()) {
-      newErrors.phoneNumber = 'Phone number is required';
-    } else if (!/^\d{9,15}$/.test(formData.phoneNumber.replace(/\s/g, ''))) {
-      newErrors.phoneNumber = 'Please enter a valid phone number';
+      newErrors.phoneNumber = "Phone number is required";
+    } else if (!/^\d{9,15}$/.test(formData.phoneNumber.replace(/\s/g, ""))) {
+      newErrors.phoneNumber = "Please enter a valid phone number";
     }
 
     // Email validation
     if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
+      newErrors.email = "Email is required";
     } else if (!validateEmail(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = "Please enter a valid email address";
     }
 
     // Password validation
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = "Password is required";
     } else {
       const passwordError = validatePassword(formData.password);
       if (passwordError) {
@@ -96,9 +96,9 @@ interface FormErrors {
 
     // Confirm Password validation
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
+      newErrors.confirmPassword = "Please confirm your password";
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = "Passwords do not match";
     }
 
     setErrors(newErrors);
@@ -107,7 +107,7 @@ interface FormErrors {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -116,42 +116,41 @@ interface FormErrors {
 
     // Simulate API call
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
       // In a real application, you would make an API call here
-      console.log('Form submitted:', formData);
-      
-      // Navigate to success page or dashboard
-      route.push('/dashboard');
+      console.log("Form submitted:", formData);
+
+      // Navigate to verification page
+      route.push("/auth/verify");
     } catch (error) {
-      console.error('Sign up error:', error);
-      setErrors({ email: 'An error occurred. Please try again.' });
+      console.error("Sign up error:", error);
+      setErrors({ email: "An error occurred. Please try again." });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleChange = (field: keyof FormData) => (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setFormData(prev => ({ ...prev, [field]: e.target.value }));
-    // Clear error for this field when user starts typing
-    if (errors[field as keyof FormErrors]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-    }
-  };
+  const handleChange =
+    (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+      // Clear error for this field when user starts typing
+      if (errors[field as keyof FormErrors]) {
+        setErrors((prev) => ({ ...prev, [field]: undefined }));
+      }
+    };
 
   return (
     <AuthLayout showcaseContent={<WorldMapShowcase />}>
-      <div className='space-y-10'>
-       <div className='gap-1 flex flex-col'>
-         <h1 className="text-xl md:text-[2rem] leading-5 md:leading-10 tracking-[-0%] font-bold text-[#18181B] ">
-          Create an account
-        </h1>
-        <p className="text-xs text-[#18181B] leading-[100%] tracking-[0%] ">
-          To start receiving cash gifts
-        </p>
-       </div>
+      <div className="space-y-10">
+        <div className="gap-1 flex flex-col">
+          <h1 className="text-xl md:text-[2rem] leading-5 md:leading-10 tracking-[-0%] font-bold text-[#18181B] ">
+            Create an account
+          </h1>
+          <p className="text-xs text-[#18181B] leading-[100%] tracking-[0%] ">
+            To start receiving cash gifts
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <Input
@@ -160,7 +159,7 @@ interface FormErrors {
             type="text"
             placeholder="John Eze"
             value={formData.fullName}
-            onChange={handleChange('fullName')}
+            onChange={handleChange("fullName")}
             error={errors.fullName}
             autoFocus
             autoComplete="name"
@@ -171,10 +170,12 @@ interface FormErrors {
             label="Phone Number"
             placeholder="81 123 456 78"
             value={formData.phoneNumber}
-            onChange={handleChange('phoneNumber')}
+            onChange={handleChange("phoneNumber")}
             error={errors.phoneNumber}
             countryCode={formData.countryCode}
-            onCountryCodeChange={(code) => setFormData(prev => ({ ...prev, countryCode: code }))}
+            onCountryCodeChange={(code) =>
+              setFormData((prev) => ({ ...prev, countryCode: code }))
+            }
             autoComplete="tel"
           />
 
@@ -184,7 +185,7 @@ interface FormErrors {
             type="email"
             placeholder="john123@gmail.com"
             value={formData.email}
-            onChange={handleChange('email')}
+            onChange={handleChange("email")}
             error={errors.email}
             autoComplete="email"
           />
@@ -194,7 +195,7 @@ interface FormErrors {
             label="Password"
             placeholder="••••••••••••••"
             value={formData.password}
-            onChange={handleChange('password')}
+            onChange={handleChange("password")}
             error={errors.password}
             helperText="Password must be at least 8 characters and include uppercase, lowercase, and numbers"
             autoComplete="new-password"
@@ -205,20 +206,26 @@ interface FormErrors {
             label="Confirm Password"
             placeholder="••••••••••••••"
             value={formData.confirmPassword}
-            onChange={handleChange('confirmPassword')}
+            onChange={handleChange("confirmPassword")}
             error={errors.confirmPassword}
             autoComplete="new-password"
           />
 
           <div className="pt-2">
-            <Button type="submit" variant='primary' className='w-full bg-[#5A42DE]! rounded-lg! text-base! font-medium! cursor-pointer ' isLoading={isLoading}>
-Create Account            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-full bg-[#5A42DE]! rounded-lg! text-base! font-medium! cursor-pointer "
+              isLoading={isLoading}
+            >
+              Create Account{" "}
+            </Button>
           </div>
 
           <p className="text-center text-[14px] text-[#717182] pt-2">
-            Already have an account?{' '}
-            <Link 
-              href="/login" 
+            Already have an account?{" "}
+            <Link
+              href="/auth/login"
               className="text-[#6c5ce7] hover:text-[#5f51d8] font-medium transition-colors"
             >
               Log in
@@ -229,4 +236,4 @@ Create Account            </Button>
     </AuthLayout>
   );
 };
-export default SignUp
+export default SignUp;

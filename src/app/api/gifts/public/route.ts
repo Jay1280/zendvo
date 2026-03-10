@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { users, gifts } from "@/lib/db/schema";
+import { eq, and, gte } from "drizzle-orm";
 import {
   validateAmount,
   validateCurrency,
@@ -14,7 +16,6 @@ const MAX_MESSAGE_LENGTH = 500;
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limiting — 10 requests per minute per IP
     const ip =
       request.headers.get("x-forwarded-for") ??
       request.headers.get("x-real-ip") ??
@@ -28,16 +29,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // Honeypot check — return fake success so bots don't adapt
     if (!validateHoneypot(body)) {
       console.warn("[PUBLIC_GIFT] Honeypot triggered, rejecting bot request");
       return NextResponse.json(
         {
           success: true,
-          data: {
-            giftId: crypto.randomUUID(),
-            status: "pending_review",
-          },
+          data: { giftId: crypto.randomUUID(), status: "pending_review" },
         },
         { status: 201 },
       );
@@ -55,7 +52,6 @@ export async function POST(request: NextRequest) {
       senderAvatar,
     } = body;
 
-    // Validate required fields
     if (!recipientId || !amount || !currency || !senderName || !senderEmail) {
       return NextResponse.json(
         {
@@ -67,7 +63,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate amount
     if (typeof amount !== "number" || !validateAmount(amount)) {
       return NextResponse.json(
         {
@@ -78,7 +73,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate currency
     if (typeof currency !== "string" || !validateCurrency(currency)) {
       return NextResponse.json(
         {
@@ -89,7 +83,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate sender email
     if (typeof senderEmail !== "string" || !validateEmail(senderEmail)) {
       return NextResponse.json(
         { success: false, error: "Invalid sender email address" },
@@ -97,7 +90,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate delivery datetime (if provided, must be in the future)
     if (unlockDatetime !== undefined && unlockDatetime !== null) {
       const parsedDate = new Date(unlockDatetime);
       if (!validateFutureDatetime(parsedDate)) {
@@ -111,8 +103,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate message length
-    if (message && typeof message === "string" && message.length > MAX_MESSAGE_LENGTH) {
+    if (
+      message &&
+      typeof message === "string" &&
+      message.length > MAX_MESSAGE_LENGTH
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -122,9 +117,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check recipient exists
-    const recipientUser = await prisma.user.findUnique({
-      where: { id: recipientId },
+    const recipientUser = await db.query.users.findFirst({
+      where: eq(users.id, recipientId),
     });
 
     if (!recipientUser) {
@@ -134,17 +128,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Duplicate detection — same senderEmail + recipientId + amount within 5 minutes
     const sanitizedSenderEmail = sanitizeInput(senderEmail).toLowerCase();
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
-    const duplicate = await prisma.gift.findFirst({
-      where: {
-        senderEmail: sanitizedSenderEmail,
-        recipientId,
-        amount,
-        createdAt: { gte: fiveMinutesAgo },
-      },
+    const duplicate = await db.query.gifts.findFirst({
+      where: and(
+        eq(gifts.senderEmail, sanitizedSenderEmail),
+        eq(gifts.recipientId, recipientId),
+        eq(gifts.amount, amount),
+        gte(gifts.createdAt, fiveMinutesAgo),
+      ),
     });
 
     if (duplicate) {
@@ -158,16 +151,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Sanitize inputs
     const sanitizedMessage = message ? sanitizeInput(message) : null;
     const sanitizedSenderName = sanitizeInput(senderName);
     const sanitizedSenderAvatar = senderAvatar
       ? sanitizeInput(senderAvatar)
       : null;
 
-    // Create gift record
-    const gift = await prisma.gift.create({
-      data: {
+    const [newGift] = await db
+      .insert(gifts)
+      .values({
         recipientId,
         amount,
         currency: currency.toUpperCase(),
@@ -178,17 +170,11 @@ export async function POST(request: NextRequest) {
         senderName: sanitizedSenderName,
         senderEmail: sanitizedSenderEmail,
         senderAvatar: sanitizedSenderAvatar,
-      },
-    });
+      })
+      .returning();
 
     return NextResponse.json(
-      {
-        success: true,
-        data: {
-          giftId: gift.id,
-          status: "pending_review",
-        },
-      },
+      { success: true, data: { giftId: newGift.id, status: "pending_review" } },
       { status: 201 },
     );
   } catch (error) {

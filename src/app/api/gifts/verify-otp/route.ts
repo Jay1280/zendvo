@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
+import { gifts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { verifyGiftOTP } from "@/server/services/otpService";
 
 export async function POST(request: NextRequest) {
@@ -30,8 +32,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const gift = await prisma.gift.findUnique({
-      where: { id: giftId },
+    const gift = await db.query.gifts.findFirst({
+      where: eq(gifts.id, giftId),
     });
 
     if (!gift) {
