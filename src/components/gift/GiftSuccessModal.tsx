@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/Button";
+import { launchCelebrationConfetti } from "@/lib/confetti";
 
 interface GiftSuccessModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ const GiftSuccessModal: React.FC<GiftSuccessModalProps> = ({
 }) => {
   const router = useRouter();
   const modalRef = useRef<HTMLDivElement>(null);
+  const hasFiredConfettiRef = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -66,6 +68,15 @@ const GiftSuccessModal: React.FC<GiftSuccessModalProps> = ({
       document.body.style.overflow = "auto";
     };
   }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (!isOpen || hasFiredConfettiRef.current) {
+      return;
+    }
+
+    hasFiredConfettiRef.current = true;
+    return launchCelebrationConfetti();
+  }, [isOpen]);
 
   const handleDone = () => {
     onClose();

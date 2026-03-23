@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import Button from "@/components/Button";
 import { Check, X } from "lucide-react";
+import { launchCelebrationConfetti } from "@/lib/confetti";
 
 type GiftSuccessModalProps = {
     isOpen: boolean;
@@ -15,6 +16,17 @@ const NewGiftSuccessModal: React.FC<GiftSuccessModalProps> = ({
     recipientName,
     onClose,
 }) => {
+    const hasFiredConfettiRef = useRef(false);
+
+    useEffect(() => {
+        if (!isOpen || hasFiredConfettiRef.current) {
+            return;
+        }
+
+        hasFiredConfettiRef.current = true;
+        return launchCelebrationConfetti();
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     const handleCopyLink = () => {
