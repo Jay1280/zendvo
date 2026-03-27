@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyAccessToken, verifyAccessTokenDetailed } from "@/lib/tokens";
 import { consumeRateLimit } from "@/lib/rate-limiter";
+import { getAccountTypeFromRole } from "@/lib/auth";
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
@@ -9,7 +10,7 @@ import {
   ACCESS_TOKEN_MAX_AGE,
   REFRESH_TOKEN_MAX_AGE,
 } from "@/lib/cookies";
-import type { TokenPayload, UserRole } from "@/lib/tokens";
+import type { TokenPayload } from "@/lib/tokens";
 
 // API routes that require authentication
 const PROTECTED_API_ROUTES = [
@@ -103,9 +104,15 @@ function injectUserHeaders(
   payload: TokenPayload,
 ): NextResponse {
   const requestHeaders = new Headers(request.headers);
+  const accountType = getAccountTypeFromRole(payload.role);
+
   requestHeaders.set("x-user-id", payload.userId);
   requestHeaders.set("x-user-email", payload.email);
   requestHeaders.set("x-user-role", payload.role);
+  if (accountType) {
+    requestHeaders.set("X-Account-Type", accountType);
+  }
+
   return NextResponse.next({ request: { headers: requestHeaders } });
 }
 

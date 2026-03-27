@@ -27,6 +27,22 @@ export const validateFutureDatetime = (date: Date): boolean => {
   return !isNaN(date.getTime()) && date.getTime() > Date.now();
 };
 
+export const validateUnlockAt = (unlockAt: string | Date): { valid: boolean; error?: string } => {
+  const unlockDate = new Date(unlockAt);
+  
+  if (isNaN(unlockDate.getTime())) {
+    return { valid: false, error: "Invalid date format for unlock_at" };
+  }
+  
+  const oneHourFromNow = Date.now() + 60 * 60 * 1000;
+  
+  if (unlockDate.getTime() < oneHourFromNow) {
+    return { valid: false, error: "unlock_at must be at least 1 hour in the future" };
+  }
+  
+  return { valid: true };
+};
+
 export const normalizePhoneNumber = (phone: string): string => {
   return phone.replace(/[\s\-().]/g, "");
 };
@@ -46,6 +62,9 @@ export const sanitizePhoneNumber = (phone: string): string => {
     // If number starts with 0 (local format), assume Nigerian format (+234)
     if (sanitized.startsWith('0')) {
       sanitized = '+234' + sanitized.substring(1);
+    } else if (sanitized.startsWith('234')) {
+      // Number already includes Nigerian country code but missing '+'
+      sanitized = '+' + sanitized;
     } else {
       // For other numbers without country code, default to +234 (Nigeria)
       sanitized = '+234' + sanitized;
@@ -56,9 +75,25 @@ export const sanitizePhoneNumber = (phone: string): string => {
 };
 
 export const validateE164PhoneNumber = (phone: string): boolean => {
+  const normalized = normalizePhoneNumber(phone.trim());
+
+  // Reject numbers that include a country code but omit '+'
+  if (!normalized.startsWith('+') && normalized.startsWith('234')) {
+    return false;
+  }
+
   const sanitized = sanitizePhoneNumber(phone);
   // E.164 format: + followed by 7-15 digits
-  return /^\+[1-9]\d{6,14}$/.test(sanitized);
+  if (!/^\+[1-9]\d{6,14}$/.test(sanitized)) {
+    return false;
+  }
+
+  // Reject Nigerian numbers where the national part is all zeros.
+  if (sanitized.startsWith('+234') && /^0+$/.test(sanitized.slice(4))) {
+    return false;
+  }
+
+  return true;
 };
 
 export const validateMessage = (message: string | null | undefined): boolean => {

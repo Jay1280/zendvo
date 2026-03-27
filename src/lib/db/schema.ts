@@ -1,16 +1,16 @@
+import { relations } from "drizzle-orm";
 import {
+  boolean,
+  doublePrecision,
+  index,
+  integer,
+  pgEnum,
   pgTable,
   text,
   timestamp,
-  integer,
-  uuid,
-  boolean,
-  doublePrecision,
-  pgEnum,
-  index,
   unique,
+  uuid,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
 
 // Enums
 export const userStatusEnum = pgEnum("user_status", [
@@ -29,33 +29,37 @@ export const giftStatusEnum = pgEnum("gift_status", [
 ]);
 
 // Tables
-export const users = pgTable("users", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  name: text("name"),
-  phoneNumber: text("phone_number").unique(),
-  username: text("username").unique(),
-  avatarUrl: text("avatar_url"),
-  role: text("role").default("user").notNull(),
-  status: userStatusEnum("status").default("unverified").notNull(),
-  loginAttempts: integer("login_attempts").default(0).notNull(),
-  lockUntil: timestamp("lock_until"),
-  otpFailedAttempts: integer("otp_failed_attempts").default(0).notNull(),
-  otpAttemptsWindowStart: timestamp("otp_attempts_window_start"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  lastLogin: timestamp("last_login"),
-  lastOtpSentAt: timestamp("last_otp_sent_at"),
-}, (table) => {
-  return [
-    unique("users_phone_number_unique").on(table.phoneNumber),
-    unique("users_email_unique").on(table.email),
-    unique("users_username_unique").on(table.username),
-    index("users_status_idx").on(table.status),
-    index("users_created_at_idx").on(table.createdAt),
-  ];
-});
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    email: text("email").notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    name: text("name"),
+    phoneNumber: text("phone_number").unique(),
+    username: text("username").unique(),
+    avatarUrl: text("avatar_url"),
+    role: text("role").default("user").notNull(),
+    status: userStatusEnum("status").default("unverified").notNull(),
+    loginAttempts: integer("login_attempts").default(0).notNull(),
+    lockUntil: timestamp("lock_until"),
+    otpFailedAttempts: integer("otp_failed_attempts").default(0).notNull(),
+    otpAttemptsWindowStart: timestamp("otp_attempts_window_start"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    lastLogin: timestamp("last_login"),
+    lastOtpSentAt: timestamp("last_otp_sent_at"),
+  },
+  (table) => {
+    return [
+      unique("users_phone_number_unique").on(table.phoneNumber),
+      unique("users_email_unique").on(table.email),
+      unique("users_username_unique").on(table.username),
+      index("users_status_idx").on(table.status),
+      index("users_created_at_idx").on(table.createdAt),
+    ];
+  },
+);
 
 export const emailVerifications = pgTable(
   "email_verifications",
@@ -111,6 +115,7 @@ export const refreshTokens = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     revokedAt: timestamp("revoked_at"),
     deviceInfo: text("device_info"),
+    deviceId: text("device_id"),
   },
   (table) => {
     return [index("rt_user_id_idx").on(table.userId)];

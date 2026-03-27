@@ -44,16 +44,17 @@ export async function POST(request: NextRequest) {
       where: eq(refreshTokens.token, refreshToken),
     });
 
-    if (!storedToken) {
-      return NextResponse.json(
-        { success: false, error: "Token not found" },
-        { status: 401 },
-      );
-    }
+    // Reuse detection
+    if (!storedToken || storedToken.revokedAt) {
+      // If a validly signed token is not in DB or is already revoked, it's a reuse!
+      // Invalidate ALL tokens for this user
+      await db
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(eq(refreshTokens.userId, payload.userId));
 
-    if (storedToken.revokedAt) {
       return NextResponse.json(
-        { success: false, error: "Token has been revoked" },
+        { success: false, error: "Refresh token has been used or is invalid" },
         { status: 401 },
       );
     }
@@ -74,10 +75,15 @@ export async function POST(request: NextRequest) {
     const newRefreshToken = await generateRefreshToken(newPayload);
 
     await db.transaction(async (tx) => {
+      // Mark old token as revoked
       await tx
-        .delete(refreshTokens)
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
         .where(eq(refreshTokens.id, storedToken.id));
+
+      // Issue new single-use token
       await tx.insert(refreshTokens).values({
+        id: crypto.randomUUID(),
         userId: payload.userId,
         token: newRefreshToken,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
