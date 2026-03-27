@@ -3,8 +3,12 @@ import crypto from "crypto";
 import { db } from "@/lib/db";
 import { users, emailVerifications, gifts } from "@/lib/db/schema";
 import { eq, and, desc, lt, or, gt, sql } from "drizzle-orm";
-import { validatePhoneCountryCode } from "@/lib/validations/auth";
 import { validateE164PhoneNumber, sanitizePhoneNumber } from "@/lib/validation";
+import {
+  AuditEventType,
+  logGiftOTPEvent,
+  logOTPEvent,
+} from "@/server/services/auditService";
 
 export const MAX_OTP_REQUESTS_PER_PHONE = 4;
 export const OTP_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
@@ -153,6 +157,10 @@ export function verifyOTPHash(
 ): boolean {
   const hash = crypto.createHmac("sha256", salt).update(otp).digest("hex");
 
+  if (hash.length !== storedHash.length) {
+    return false;
+  }
+
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(storedHash));
 }
 
@@ -164,15 +172,6 @@ export async function sendOTP(phoneNumber: string): Promise<{ success: boolean; 
         success: false,
         message: "Invalid phone number format. Please use E.164 format (e.g., +2348123456789)",
         error: "INVALID_PHONE_FORMAT"
-      };
-    }
-
-    const countryValidation = validatePhoneCountryCode(phoneNumber);
-    if (!countryValidation.isValid) {
-      return {
-        success: false,
-        message: countryValidation.message!,
-        error: "UNSUPPORTED_COUNTRY"
       };
     }
 
