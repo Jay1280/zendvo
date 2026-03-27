@@ -15,7 +15,7 @@ export default function WalletPage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold text-[#18181B]">My Wallet</h1>
           <p className="text-[#717182] max-w-md mx-auto">
-            Your financial hub is almost ready. Soon you'll be able to manage
+            Your financial hub is almost ready. Soon you&apos;ll be able to manage
             your balances, track transactions, and fund your account seamlessly.
           </p>
         </div>
